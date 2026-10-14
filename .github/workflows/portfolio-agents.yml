@@ -1,0 +1,45 @@
+name: portfolio-agents
+
+on:
+  schedule:
+    # Co 30 minut, od poniedziałku do piątku, 07:00-21:30 UTC (sesje europejska i amerykańska).
+    - cron: "*/30 7-21 * * 1-5"
+  workflow_dispatch:
+
+concurrency:
+  group: portfolio-agents
+  cancel-in-progress: false
+
+jobs:
+  run-agents:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r portfolio_agents/requirements.txt
+
+      # Stan (deduplikacja, cooldown, poprzednie pozycje funduszy) przechowujemy w cache,
+      # bo każde uruchomienie to świeży runner.
+      - uses: actions/cache/restore@v4
+        with:
+          path: portfolio_agents/state/state.json
+          key: portfolio-agents-state-${{ github.run_id }}
+          restore-keys: portfolio-agents-state-
+
+      - name: Uruchom agentów
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SEC_CONTACT_EMAIL: ${{ secrets.SEC_CONTACT_EMAIL }}
+        run: python -m portfolio_agents
+
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: portfolio_agents/state/state.json
+          key: portfolio-agents-state-${{ github.run_id }}

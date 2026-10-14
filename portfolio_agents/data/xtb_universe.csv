@@ -1,0 +1,12 @@
+symbol,ticker,name,aliases,cusip
+AAPL.US,AAPL,Apple Inc,Apple;iPhone,
+MSFT.US,MSFT,Microsoft Corp,Microsoft;Azure,
+NVDA.US,NVDA,NVIDIA Corp,Nvidia,
+TSLA.US,TSLA,Tesla Inc,Tesla,
+AMZN.US,AMZN,Amazon.com Inc,Amazon,
+GOOGL.US,GOOGL,Alphabet Inc,Alphabet;Google,
+META.US,META,Meta Platforms Inc,Meta;Facebook,
+JPM.US,JPM,JPMorgan Chase & Co,JPMorgan;JP Morgan,
+KO.US,KO,Coca-Cola Co,Coca-Cola,
+XOM.US,XOM,Exxon Mobil Corp,ExxonMobil;Exxon,
+DJT.US,DJT,Trump Media & Technology Group Corp,Trump Media;Truth Social,

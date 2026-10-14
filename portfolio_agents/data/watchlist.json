@@ -1,0 +1,51 @@
+{
+  "investors": [
+    {
+      "name": "Donald J. Trump (insider, np. Trump Media DJT)",
+      "cik": "",
+      "kind": "insider",
+      "note": "Wpisz 10-cyfrowy CIK tej osoby z EDGAR (sec.gov, wyszukiwarka firm/osób). Dopóki pole jest puste, agent go pomija."
+    },
+    {
+      "name": "Berkshire Hathaway (Warren Buffett)",
+      "cik": "0001067983",
+      "kind": "fund",
+      "note": "13F-HR, raport kwartalny, opóźniony do 45 dni po końcu kwartału"
+    },
+    {
+      "name": "Pershing Square Capital (Bill Ackman)",
+      "cik": "0001336528",
+      "kind": "fund",
+      "note": "13F-HR, raport kwartalny"
+    },
+    {
+      "name": "Bridgewater Associates (Ray Dalio)",
+      "cik": "0001350694",
+      "kind": "fund",
+      "note": "13F-HR, raport kwartalny"
+    }
+  ],
+  "news_feeds": [
+    "https://www.cnbc.com/id/100003114/device/rss/rss.html",
+    "https://feeds.marketwatch.com/marketwatch/topstories/",
+    "https://www.forbes.com/investing/feed/",
+    "https://news.google.com/rss/search?q=Trump+stock+OR+%22Trump+Media%22+OR+%22Truth+Social%22&hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=Berkshire+Hathaway+OR+Buffett+OR+Ackman+OR+Dalio&hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=Wall+Street+stocks+earnings&hl=en-US&gl=US&ceid=US:en"
+  ],
+  "weights": {
+    "insider": 0.40,
+    "manual": 0.40,
+    "holdings": 0.20,
+    "news": 0.25
+  },
+  "thresholds": {
+    "signal": 0.30,
+    "watch": 0.15,
+    "cooldown_hours": 12,
+    "news_lookback_hours": 6,
+    "insider_lookback_days": 5,
+    "holdings_max_age_days": 120
+  },
+  "my_positions": []
+}

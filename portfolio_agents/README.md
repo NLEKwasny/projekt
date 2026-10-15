@@ -25,11 +25,37 @@ Zestaw agentów, które zbierają publiczne dane o transakcjach ważnych inwesto
 - **Opóźnienia:** Form 4 pojawia się po ok. 2 dniach roboczych, 13F do 45 dni po kwartale. To sygnały strukturalne, nie intraday.
 - **Zakres:** agenci filingów działają dla spółek z numerem SEC (głównie akcje USA). Indeksy, surowce, forex i kryptowaluty z XTB
   nie mają filingów, więc mogą pojawić się tylko w newsach.
-- **Uniwersum XTB:** `data/xtb_universe.csv` zawiera przykładowe 11 spółek. Pełną listę wyeksportuj z XTB i wklej do tego pliku.
-  Instrumenty spoza pliku są ignorowane.
+- **Uniwersum XTB:** `data/xtb_universe.csv` to na razie przykładowe 11 spółek. Pełną listę (akcje, ETF-y, indeksy, towary,
+  waluty, krypto) generuje eksport z Twojego konta, patrz sekcja „Pełne uniwersum XTB” niżej. Instrumenty spoza pliku są ignorowane.
 - **Brak backtestu:** progi są ustawione ręcznie. Nie ma dowodu, że sygnały zarabiają. Zanim podejmiesz na ich podstawie decyzję, sprawdź je na historii.
 - **To nie jest porada inwestycyjna.**
 - GitHub Actions może opóźnić uruchomienie o kilka–kilkanaście minut.
+
+## Pełne uniwersum XTB (akcje, ETF-y, indeksy, towary, waluty)
+
+Lista instrumentów pochodzi z xAPI XTB, czyli z Twojego konta. Eksport uruchamiasz lokalnie:
+
+```bash
+pip install -r portfolio_agents/requirements.txt
+XTB_USER_ID=<numer konta> python -m portfolio_agents.xtb_export          # konto realne
+python -m portfolio_agents.xtb_export --mode demo --out /tmp/demo.csv   # konto demo, do sprawdzenia
+```
+
+Hasło do xAPI program zapyta w terminalu (albo weź je ze zmiennej `XTB_PASSWORD`). Nie wklejaj go w czacie
+ani do repozytorium. Eksport zapisuje `data/xtb_universe.csv`. Potem zatwierdź ten plik w repozytorium.
+
+Co z tego wynika:
+- **Akcje i ETF-y** (symbol z sufiksem giełdy, np. `AAPL.US`) dostają analizę techniczną tylko dla USA, bo Yahoo
+  notuje je pod tickerem. Dla innych giełd pole `price_symbol` trzeba uzupełnić ręcznie.
+- **Indeksy, towary, waluty, CFD** (np. `US500`) są wyszukiwane w newsach po nazwie, bez raportów SEC i bez technik,
+  dopóki nie uzupełnisz `price_symbol`.
+- **Kolizje tickerów** (ten sam ticker na kilku giełdach) zostawiają notowanie w USA.
+- Pełna lista to tysiące wierszy. Agent newsowy dopasowuje nazwy wszystkich, więc więcej nagłówków trafia do Claude.
+  Limit `MAX_LLM_ITEMS` nadal obowiązuje.
+
+**Niezweryfikowane w tej sesji** (brak dostępu do XTB): endpoint `wss://ws.xtb.com/real`, nazwy pól odpowiedzi
+i kształt sufiksów giełdowych (`.US`) wzięte z publicznych klientów xAPI. Przy pierwszym eksporcie sprawdź, czy liczba
+wierszy i nazwy są zgodne z aplikacją.
 
 ## Konfiguracja (jednorazowo)
 

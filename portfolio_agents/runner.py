@@ -59,14 +59,18 @@ def main(argv: list[str] | None = None) -> int:
             log.exception("Agent %s nie powiódł się", name)
 
     views = {}
-    for symbol in sorted({e.symbol for e in events}):
+    for ticker in sorted({e.symbol for e in events}):
+        price_symbol = universe.price_symbol(ticker)
+        if not price_symbol:
+            log.info("Brak symbolu do notowań dla %s - analiza techniczna pominięta", ticker)
+            continue
         try:
-            view = technicals.technical_view(symbol)
+            view = technicals.technical_view(price_symbol)
         except Exception as exc:
-            log.warning("Analiza techniczna %s pominięta: %s", symbol, exc)
+            log.warning("Analiza techniczna %s pominięta: %s", ticker, exc)
             view = None
         if view is not None:
-            views[symbol] = view
+            views[ticker] = view
         time.sleep(0.3)
 
     sent = 0

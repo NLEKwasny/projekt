@@ -25,8 +25,13 @@ def _norm(text: str) -> str:
 
 
 def _issuer_key(name: str) -> str:
+    """Nazwa emitenta bez końcowych sufiksów prawnych ("Target Corp" -> "TARGET", "New York Times Co" -> "NEW YORK TIMES")."""
     words = re.sub(r"[^A-Z0-9 ]+", " ", name.upper()).split()
-    return " ".join(w for w in words if w not in LEGAL_SUFFIXES)
+    while words and words[-1] in LEGAL_SUFFIXES:
+        words.pop()
+    while words and words[0] == "THE":
+        words.pop(0)
+    return " ".join(words)
 
 
 def classify_symbol(symbol: str) -> tuple[str, str]:
@@ -71,8 +76,14 @@ class Universe:
         for inst in self.instruments:
             if inst.cusip:
                 self._cusips[inst.cusip] = inst.ticker
-            self._issuers[_issuer_key(inst.name)] = inst.ticker
-            for phrase in {inst.name, _issuer_key(inst.name), *inst.aliases}:
+            issuer = _issuer_key(inst.name)
+            self._issuers[issuer] = inst.ticker
+            # Jednowyrazowa nazwa emitenta ("Target") jest zbyt ogólna, żeby ją szukać w newsach.
+            # Taki emitent trafia do newsów tylko przez pełną nazwę albo alias.
+            phrases = {inst.name, *inst.aliases}
+            if len(issuer.split()) >= 2:
+                phrases.add(issuer)
+            for phrase in phrases:
                 norm = _norm(phrase)
                 if len(norm.strip()) >= 4:
                     self._phrases.append((norm, inst.ticker))
@@ -114,7 +125,8 @@ class Universe:
         for phrase, ticker in self._phrases:
             if phrase in norm:
                 found.add(ticker)
-        for token in re.findall(r"(?<![A-Za-z])[A-Z]{2,5}(?![A-Za-z])", text):
+        # Tickery mogą zawierać cyfry (DE40 to indeks, nie Deere), więc tokenem jest cały ciąg liter i cyfr.
+        for token in re.findall(r"(?<![A-Za-z0-9])[A-Z][A-Z0-9]{1,5}(?![A-Za-z0-9])", text):
             if token in self.tickers:
                 found.add(token)
         return found

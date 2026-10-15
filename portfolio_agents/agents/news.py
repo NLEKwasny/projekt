@@ -204,12 +204,15 @@ def collect(settings: Settings, universe: Universe, state: State, llm: Any = Non
             now: datetime | None = None) -> list[Event]:
     now = now or datetime.now(timezone.utc)
     fresh = select_new(fetch_items(settings.news_feeds), state, settings.news_lookback_hours, now)
+    candidates = attach_candidates(fresh, universe)
+    batch = candidates[:MAX_LLM_ITEMS]
+    # Nagłówki ponad limit NIE są oznaczane jako przetworzone: wrócą w kolejnym przebiegu, dopóki są świeże.
+    overflow = {item.id for item, _ in candidates[MAX_LLM_ITEMS:]}
     for item in fresh:
-        state.mark("news", item.id)
-    batch = attach_candidates(fresh, universe)
-    if len(batch) > MAX_LLM_ITEMS:
-        log.info("news: pomijam %d nagłówków ponad limit", len(batch) - MAX_LLM_ITEMS)
-        batch = batch[:MAX_LLM_ITEMS]
+        if item.id not in overflow:
+            state.mark("news", item.id)
+    if overflow:
+        log.info("news: %d nagłówków ponad limit %d - ocenię je w kolejnym przebiegu", len(overflow), MAX_LLM_ITEMS)
     if not batch:
         return []
     verdicts: list[NewsVerdict] | None = None

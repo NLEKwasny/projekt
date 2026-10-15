@@ -72,43 +72,63 @@ def _call(transport: Transport, command: str, **arguments: Any) -> dict[str, Any
     return response
 
 
+def _safe_logout(transport: Transport) -> None:
+    # Wylogowanie nie może unieważnić już pobranej listy ani przesłonić błędu z getAllSymbols.
+    try:
+        _call(transport, "logout")
+    except Exception as exc:
+        log.warning("Wylogowanie nie powiodło się (%s)", type(exc).__name__)
+
+
 def fetch_symbols(transport: Transport, user_id: str, password: str) -> list[dict[str, Any]]:
     _call(transport, "login", userId=user_id, password=password)
     try:
-        return list(_call(transport, "getAllSymbols").get("returnData", []))
+        response = _call(transport, "getAllSymbols")
     finally:
-        try:
-            _call(transport, "logout")
-        except XtbError as exc:
-            log.warning("Wylogowanie nie powiodło się: %s", exc)
+        _safe_logout(transport)
+    records = response.get("returnData")
+    if not isinstance(records, list) or not all(isinstance(r, dict) for r in records):
+        raise XtbError("getAllSymbols: nieoczekiwany kształt odpowiedzi (returnData nie jest listą obiektów)")
+    return records
+
+
+def _text(value: Any) -> str:
+    return value.strip() if isinstance(value, str) else ""
 
 
 def build_rows(records: list[dict[str, Any]]) -> list[dict[str, str]]:
     rows = []
     for record in records:
-        symbol = str(record.get("symbol", "")).strip()
+        symbol = _text(record.get("symbol"))
         if not symbol:
             continue
         asset_type, ticker = classify_symbol(symbol)
+        if not any(ch.isalnum() for ch in ticker):
+            continue
         rows.append({
             "symbol": symbol,
             "ticker": ticker,
-            "name": str(record.get("description", "")).strip(),
+            "name": _text(record.get("description")),
             "aliases": "",
             "cusip": "",
             "asset_type": asset_type,
             "price_symbol": default_price_symbol(symbol, asset_type, ticker),
-            "category": str(record.get("categoryName", "")),
-            "group": str(record.get("groupName", "")),
+            "category": _text(record.get("categoryName")),
+            "group": _text(record.get("groupName")),
         })
     return dedupe_by_ticker(rows)
 
 
+def _preference(row: dict[str, str]) -> tuple[bool, bool, str]:
+    # Najpierw akcje/ETF-y, potem notowanie w USA, potem kolejność alfabetyczna (deterministyczna).
+    return (row["asset_type"] != "equity", not row["symbol"].upper().endswith(".US"), row["symbol"])
+
+
 def dedupe_by_ticker(rows: list[dict[str, str]]) -> list[dict[str, str]]:
-    """Jeden ticker = jeden wiersz. Przy kolizji (np. AAPL.US i AAPL.DE) zostaje notowanie w USA."""
-    ordered = sorted(rows, key=lambda r: (not r["symbol"].upper().endswith(".US"), r["symbol"]))
+    """Jeden ticker = jeden wiersz. Przy kolizji (np. AAPL.US, AAPL.DE, CFD AAPL) zostaje najbardziej
+    wiarygodne notowanie: akcja, potem USA."""
     best: dict[str, dict[str, str]] = {}
-    for row in ordered:
+    for row in sorted(rows, key=_preference):
         best.setdefault(row["ticker"], row)
     if len(best) != len(rows):
         log.info("Pominięto %d wierszy o zduplikowanym tickerze", len(rows) - len(best))
@@ -116,11 +136,38 @@ def dedupe_by_ticker(rows: list[dict[str, str]]) -> list[dict[str, str]]:
 
 
 def write_csv(rows: list[dict[str, str]], path: Path) -> None:
+    """Zapis przez plik tymczasowy: błąd w połowie nie niszczy poprzedniej wersji listy."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as fh:
-        writer = csv.DictWriter(fh, fieldnames=CSV_FIELDS)
-        writer.writeheader()
-        writer.writerows(rows)
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        with tmp.open("w", encoding="utf-8", errors="replace", newline="") as fh:
+            writer = csv.DictWriter(fh, fieldnames=CSV_FIELDS)
+            writer.writeheader()
+            writer.writerows(rows)
+        os.replace(tmp, path)
+    finally:
+        if tmp.exists():
+            tmp.unlink()
+
+
+def run_export(transport: Transport, user_id: str, password: str, out: Path) -> int:
+    try:
+        records = fetch_symbols(transport, user_id, password)
+    except XtbError as exc:
+        print(f"Błąd xAPI: {exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:  # sieć, timeout, zerwane połączenie - bez śladu stosu, który mógłby zawierać dane sesji
+        print(f"Nie udało się pobrać listy z XTB ({type(exc).__name__})", file=sys.stderr)
+        return 1
+
+    rows = build_rows(records)
+    if not rows:
+        print("XTB nie zwróciło żadnego użytecznego instrumentu - plik NIE został nadpisany", file=sys.stderr)
+        return 1
+    write_csv(rows, out)
+    equities = sum(1 for r in rows if r["asset_type"] == "equity")
+    print(f"Zapisano {len(rows)} instrumentów do {out} (akcje/ETF: {equities}, pozostałe: {len(rows) - equities})")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -137,22 +184,13 @@ def main(argv: list[str] | None = None) -> int:
     except ImportError:
         print("Brak biblioteki websocket-client: pip install -r portfolio_agents/requirements.txt", file=sys.stderr)
         return 1
+    except Exception as exc:
+        print(f"Nie udało się połączyć z XTB ({type(exc).__name__})", file=sys.stderr)
+        return 1
     try:
-        records = fetch_symbols(transport, user_id, password)
-    except XtbError as exc:
-        print(f"Błąd xAPI: {exc}", file=sys.stderr)
-        return 1
-    except Exception as exc:  # sieć, timeout, zerwane połączenie - bez śladu stosu, który mógłby zawierać dane sesji
-        print(f"Nie udało się pobrać listy z XTB ({type(exc).__name__})", file=sys.stderr)
-        return 1
+        return run_export(transport, user_id, password, args.out)
     finally:
         transport.close()
-
-    rows = build_rows(records)
-    write_csv(rows, args.out)
-    equities = sum(1 for r in rows if r["asset_type"] == "equity")
-    print(f"Zapisano {len(rows)} instrumentów do {args.out} (akcje/ETF: {equities}, pozostałe: {len(rows) - equities})")
-    return 0
 
 
 if __name__ == "__main__":
